@@ -1,0 +1,98 @@
+zabbix_export:
+  version: '6.4'
+  template_groups:
+    - uuid: 7df96b18c230490a9a0a9e2307226338
+      name: Templates
+  templates:
+    - uuid: 17ec47d1fb5b43bbbb9894ac9f9ce258
+      template: 'Template Crypto currency'
+      name: 'Template Crypto currency'
+      groups:
+        - name: Templates
+      items:
+        - uuid: 343cc32e8ea54d639c44b4969e1a4fe7
+          name: 'Cryptos DATA'
+          type: DEPENDENT
+          key: http.crypto.discovery.data
+          delay: '0'
+          history: 1h
+          trends: '0'
+          value_type: TEXT
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var obj = JSON.parse(value);
+                  var data = [];
+                  for (var key in obj) {
+                      data.push({
+                          "{#CRYPTO}": key,
+                          "value": obj[key].usd
+                      });
+                  }
+                  return JSON.stringify({"data": data});
+                  
+          master_item:
+            key: http.crypto.raw
+        - uuid: 912e8f610f2940cb809cf33b86a5545c
+          name: 'Cryptos Raw'
+          type: HTTP_AGENT
+          key: http.crypto.raw
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          timeout: 15s
+          url: 'https://api.coingecko.com/api/v3/simple/price?ids={$CURRENCY}&vs_currencies=usd'
+      discovery_rules:
+        - uuid: 09699ce402ef44f4bb86aad45e104e80
+          name: 'Descubrimiento de Criptomonedas'
+          type: DEPENDENT
+          key: http.crypto.discovery
+          delay: '0'
+          item_prototypes:
+            - uuid: 3e68720238ed44b895bb62d74d959c6f
+              name: 'Precio de {#CRYPTO} usd'
+              type: HTTP_AGENT
+              key: 'crypto.http.price[{#CRYPTO}]'
+              status: DISABLED
+              discover: NO_DISCOVER
+              value_type: FLOAT
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $..usd
+                - type: STR_REPLACE
+                  parameters:
+                    - '['
+                    - ''
+                - type: STR_REPLACE
+                  parameters:
+                    - ']'
+                    - ''
+              timeout: '10'
+              url: 'https://api.coingecko.com/api/v3/simple/price?ids={#CRYPTO}&vs_currencies=usd'
+            - uuid: 932715f8d98f4c82ac12ca49117888d9
+              name: 'Precio de {#CRYPTO}'
+              type: DEPENDENT
+              key: 'crypto.price[{#CRYPTO}]'
+              delay: '0'
+              history: 900d
+              value_type: FLOAT
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.{#CRYPTO}.usd'
+              master_item:
+                key: http.crypto.raw
+              trigger_prototypes:
+                - uuid: d87b86a6d8914122b98aa149db0df7da
+                  expression: 'forecast(/Template Crypto currency/crypto.price[{#CRYPTO}],1h,0)'
+                  name: 'Precio de {#CRYPTO}'
+                  status: DISABLED
+                  discover: NO_DISCOVER
+                  priority: WARNING
+          master_item:
+            key: http.crypto.discovery.data
+      macros:
+        - macro: '{$CURRENCY}'
+          value: 'bitcoin,ethereum,raptoreum'
